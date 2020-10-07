@@ -37,7 +37,7 @@ Sub GAUG_createHyperlinksForCitationsAPA()
 '*****************************
     'SEE DOCUMENTATION
     'specifies the name of the font style used for the title of the bibliography
-    strStyleForTitleOfBibliography = "Titre de dernière section"
+    strStyleForTitleOfBibliography = "Titre 1"
 
     'possible values are True and False
     'SEE DOCUMENTATION
@@ -109,7 +109,7 @@ Sub GAUG_createHyperlinksForCitationsAPA()
 
 
     'disables the screen updating while creating the hyperlinks to increase speed
-    Application.ScreenUpdating = False
+Application.ScreenUpdating = False
 
 '*****************************
 '*   Creation of bookmarks   *
@@ -144,7 +144,7 @@ Sub GAUG_createHyperlinksForCitationsAPA()
             'checks if the section has text with style indicated by strStyleForTitleOfBibliography
             '(it is a section not belonging to any chapter after the sections of parts and chapters)
             blnFound = False
-            With documentSection.Range.Find
+            With documentSection.range.Find
                 .Style = strStyleForTitleOfBibliography
                 .Execute
                 blnFound = .Found
@@ -158,7 +158,7 @@ Sub GAUG_createHyperlinksForCitationsAPA()
         'checks if the bibliography is in this section
         If blnFound Then
             'checks all fields
-            For Each sectionField In documentSection.Range.Fields
+            For Each sectionField In documentSection.range.Fields
                 'if it is the bibliography
                 If sectionField.Type = wdFieldAddin And Trim(sectionField.Code) = "ADDIN Mendeley Bibliography CSL_BIBLIOGRAPHY" Then
                     blnBibliographyFound = True
@@ -214,7 +214,7 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                                 'creates the bookmark
                                 Selection.Bookmarks.Add _
                                     Name:="SignetBibliographie_" & Format(CStr(intRefereceNumber), "00#"), _
-                                    Range:=Selection.Range
+                                    range:=Selection.range
                             End If
 
                             'continues with the next number
@@ -249,7 +249,7 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                                     If blnURLFound Then
                                         'checks there is no hyperlink already
                                         If Selection.Hyperlinks.Count = 0 Then
-                                            Selection.Hyperlinks.Add Anchor:=Selection.Range, _
+                                            Selection.Hyperlinks.Add Anchor:=Selection.range, _
                                                 Address:=Replace(Trim(CStr(varNonDetectedURL)), " ", "%20"), SubAddress:="", _
                                                 ScreenTip:=""
                                         End If
@@ -298,7 +298,7 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                                         '     when the hyperlink was created with the list of non detected URLs
                                         '     when a partial URL is detected and the hyperlink was created with the list of non detected URLs
                                         If Selection.Hyperlinks.Count = 0 Then
-                                            Selection.Hyperlinks.Add Anchor:=Selection.Range, _
+                                            Selection.Hyperlinks.Add Anchor:=Selection.range, _
                                                 Address:=strURL, SubAddress:="", _
                                                 ScreenTip:=""
                                         End If
@@ -342,6 +342,7 @@ Sub GAUG_createHyperlinksForCitationsAPA()
     Set objRegExpCitationData = New RegExp
     Set objRegExpBiblioEntry = New RegExp
     Set objRegExpFindEntry = New RegExp
+    Set objRegExpParenthesis = New RegExp
     'sets the pattern to match every citation entry (with or without authors) in current field
     '(the year of publication is always present, authors may not be present)
     '(all text non starting by "(" or "," or ";" followed by non digits until a year is found)
@@ -353,22 +354,30 @@ Sub GAUG_createHyperlinksForCitationsAPA()
     'updated to separate authors from editors:
     'objRegExpCitationData.Pattern = "(\" & Chr(34) & "editor\" & Chr(34) & "\s:\s)|(((\" & Chr(34) & "id\" & Chr(34) & ")|(\" & Chr(34) & "family\" & Chr(34) & "))\s\:\s\" & Chr(34) & "[^\" & Chr(34) & "]*\" & Chr(34) & ")"
     'updated to also include the publication year:
-    objRegExpCitationData.Pattern = "((\" & Chr(34) & "editor\" & Chr(34) & "\s*:\s*)|(((\" & Chr(34) & "id\" & Chr(34) & ")|(\" & Chr(34) & "family\" & Chr(34) & "))\s*\:\s*\" & Chr(34) & "[^\" & Chr(34) & "]*\" & Chr(34) & "))|(\[\s*\[\s*\" & Chr(34) & "[0-9]+\" & Chr(34) & "\s*\]\s*\])"
+    objRegExpCitationData.Pattern = "((\" & Chr(34) & "editor\" & Chr(34) & "\s*:\s*)|(((\" & Chr(34) & "id\" & Chr(34) & ")|(\" & Chr(34) & "family\" & Chr(34) & "))\s*\:\s*\" & Chr(34) & "[^\" & Chr(34) & "]*\" & Chr(34) & "))|(\[\s*\[\s*\" & Chr(34) & "[0-9]+\" & Chr(34) & ".*\s*\]\s*\])"
+    objRegExpParenthesis.Pattern = "([0-9]){4}([a-z])?"
     'sets case insensitivity
     objRegExpCitation.IgnoreCase = False
     objRegExpCitationData.IgnoreCase = False
     objRegExpBiblioEntry.IgnoreCase = False
     objRegExpFindEntry.IgnoreCase = False
+    objRegExpParenthesis.IgnoreCase = False
+
     'sets global applicability
     objRegExpCitation.Global = True
     objRegExpCitationData.Global = True
     objRegExpBiblioEntry.Global = True
     objRegExpFindEntry.Global = True
+    objRegExpParenthesis.Global = True
+    
+    'Orphans list
+    Dim Orphans()
+    o = 0
 
     'checks all sections
     For Each documentSection In ActiveDocument.Sections
         'checks all fields
-        For Each sectionField In documentSection.Range.Fields
+        For Each sectionField In documentSection.range.Fields
             'if it is a citation
             If sectionField.Type = wdFieldAddin And Left(sectionField.Code, 18) = "ADDIN CSL_CITATION" Then
 
@@ -382,7 +391,8 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                     'gets the matches (all entries in the citation .Data according to the regular expression)
                     '(used to find the entry in the bibliography)
                     Set colMatchesCitationData = objRegExpCitationData.Execute(sectionField.Code)
-
+                    
+                    authorOutOfParenthesis = False
                     'treats all matches (all entries in citation) to generate hyperlinks
                     For Each objMatchCitation In colMatchesCitation
                         'I COULD NOT FIND A MORE EFFICIENT WAY TO SELECT EVERY REFERENCE
@@ -400,11 +410,40 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                             'removes the last character that could be a letter, the next loop will finish removing the year
                             strLastAuthors = Left(strLastAuthors, Len(strLastAuthors) - 1)
                         End If
+                        
+                        Set colMatchYear = objRegExpParenthesis.Execute(objMatchCitation.Value)
+                                                
+                        For Each Match In colMatchYear
+                        
+                            strYear = CStr(Match.Value)
+                        
+                        Next
+                        
+                        
                         'removes the years to leave only the authors's family names
-                        Do While IsNumeric(Right(strLastAuthors, 1)) Or (Right(strLastAuthors, 1) = ",") Or (Right(strLastAuthors, 1) = " ")
+                        Do While IsNumeric(Right(strLastAuthors, 1)) Or (Right(strLastAuthors, 1) = ",") Or (Right(strLastAuthors, 1) = " " Or (Right(strLastAuthors, 1) = "("))
                             strLastAuthors = Left(strLastAuthors, Len(strLastAuthors) - 1)
                         Loop
                         strLastAuthors = Trim(strLastAuthors) '"et al." may still be in the string, but we need it that way
+                        
+                        testParenthesis = InStr(objMatchCitation.Value, "(")
+                        
+                        If testParenthesis > 0 Then
+                            authorOutOfParenthesis = True
+                            offsetCitationBeg = 1
+                            offsetCitationEnd = Len(strYear)
+                        Else
+                        
+                            If authorOutOfParenthesis = True Then
+                                offsetCitationBeg = -Len(strLastAuthors) - 1
+                                offsetCitationEnd = Len(strYear) - Len(strLastAuthors) - 1
+                            Else
+                                offsetCitationBeg = 0
+                                offsetCitationEnd = objMatchCitation.Length - 1
+                            End If
+                        
+                        End If
+                        
 
 
                         'iterates to find all ("id" : "ITEM-X") in colMatchesCitationData to identify where the citation is located
@@ -424,25 +463,25 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                             For Each objMatchCitationData In colMatchesCitationData
                                 'activates the flag only if in current citation entry
                                 'if the current citation entry starts/ends here ("id" : "ITEM-X")
-                                If objMatchCitationData.Value = Chr(34) & "id" & Chr(34) & " : " & Chr(34) & "ITEM-" & CStr(intCitationEntryPosition) & Chr(34) Then
+                                If objMatchCitationData.Value = Chr(34) & "id" & Chr(34) & ":" & Chr(34) & "ITEM-" & CStr(intCitationEntryPosition) & Chr(34) Then
                                     blnCitationEntryPositionFound = Not blnCitationEntryPositionFound
                                 Else
                                     If blnCitationEntryPositionFound Then
                                         'if the "editor" names start here, sets the flag to stop adding them
-                                        If objMatchCitationData.Value = Chr(34) & "editor" & Chr(34) & " : " Then
+                                        If objMatchCitationData.Value = Chr(34) & "editor" & Chr(34) & ":" Then
                                             'but if no authors were found (like with a book with only editors), then the flag is not set because the editors are used for the citation
                                             If Len(objRegExpFindEntry.Pattern) > 0 Then
                                                 blnEditorsFound = True
                                             End If
                                         Else
                                             'skips the year related to "accessed" that may be between start/end of current ("id" : "ITEM-X")
-                                            If Not (Left(objMatchCitationData.Value, 5) = "[ [ " & Chr(34) And Right(objMatchCitationData.Value, 5) = Chr(34) & " ] ]") Then
+                                            If Not (Left(objMatchCitationData.Value, 3) = "[[" & Chr(34) And Right(objMatchCitationData.Value, 3) = Chr(34) & "]]") Then
                                                 'if the names are the author's names
                                                 If Not blnEditorsFound Then
                                                     'gets the last name of the author and adds it to the regular expression
-                                                    objRegExpBiblioEntry.Pattern = objRegExpBiblioEntry.Pattern & Replace(Mid(objMatchCitationData.Value, InStr(objMatchCitationData.Value, Chr(34) & " : " & Chr(34)) + 5), Chr(34), "") & ".*"
-                                                    'creates another patterns to match the citation entry with the citation data, they are not in the same position as thought
-                                                    objRegExpFindEntry.Pattern = objRegExpFindEntry.Pattern & Replace(Mid(objMatchCitationData.Value, InStr(objMatchCitationData.Value, Chr(34) & " : " & Chr(34)) + 5), Chr(34), "") & ".*"
+                                                    objRegExpBiblioEntry.Pattern = objRegExpBiblioEntry.Pattern & Replace(Split(objMatchCitationData.Value, ":")(1), Chr(34), "") & ".*"
+                                                    'creates another pattern to match the citation entry with the citation data, they are not in the same position as thought
+                                                    objRegExpFindEntry.Pattern = objRegExpFindEntry.Pattern & Replace(Split(objMatchCitationData.Value, ":")(1), Chr(34), "") & ".*"
                                                     If Not blnAuthorsFound Then
                                                         'includes the part to check for "et al."
                                                         objRegExpFindEntry.Pattern = objRegExpFindEntry.Pattern & "((et al\..*)|("
@@ -454,8 +493,8 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                                         End If
                                     Else
                                         'gets the year of the publication, it is after the entry ends in ("id" : "ITEM-X")
-                                        If blnAuthorsFound And Left(objMatchCitationData.Value, 5) = "[ [ " & Chr(34) And Right(objMatchCitationData.Value, 5) = Chr(34) & " ] ]" Then
-                                            strLastYear = Mid(objMatchCitationData.Value, 6, Len(objMatchCitationData.Value) - 10)
+                                        If blnAuthorsFound And Left(objMatchCitationData.Value, 3) = "[[" & Chr(34) And Right(objMatchCitationData.Value, 3) = Chr(34) & "]]" Then
+                                            strLastYear = Split(objMatchCitationData.Value, Chr(34))(1)
                                             'finishes the pattern including the year and checking if there are more than one author
                                             'if only one author, then removes "et al." from the pattern
                                             If Right(objRegExpFindEntry.Pattern, 2) = "|(" Then
@@ -472,10 +511,10 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                             Next 'gets the data from current citation entry to build the pattern to find the reference entry in biblio
 
                             'gets the matches, if any, to check if this reference entry corresponds to the citation being treated
-                            If Len(Trim(objMatchCitation.Value)) > 6 Then 'includes ", " before the year
-                                Set colMatchesFindEntry = objRegExpFindEntry.Execute(objMatchCitation.Value)
+                            If Len(Trim(strYear)) > 6 Then 'includes ", " before the year
+                                Set colMatchesFindEntry = objRegExpFindEntry.Execute(strYear)
                             Else
-                                Set colMatchesFindEntry = objRegExpFindEntry.Execute(strLastAuthors & ", " & objMatchCitation.Value)
+                                Set colMatchesFindEntry = objRegExpFindEntry.Execute(strLastAuthors & ", " & strYear)
                             End If
                             'if this is the corresponding reference entry
                             If colMatchesFindEntry.Count > 0 Then
@@ -489,11 +528,7 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                         'adds the year of current citation entry
                         'we include the year from objMatchCitation (the visible text in the document) because
                         'it may also include a letter in the end (e.g. "2017a") and we need that letter
-                        If Mid(objMatchCitation.Value, Len(objMatchCitation.Value) - 4, 1) = " " Then
-                            objRegExpBiblioEntry.Pattern = objRegExpBiblioEntry.Pattern & "\(" & Right(objMatchCitation.Value, 4) & "\)"
-                        Else
-                            objRegExpBiblioEntry.Pattern = objRegExpBiblioEntry.Pattern & "\(" & Right(objMatchCitation.Value, 5) & "\)"
-                        End If
+                        objRegExpBiblioEntry.Pattern = objRegExpBiblioEntry.Pattern & "\(" & Right(strYear, 5) & "\)"
 
                         'last verification to make sure we found the citation and not because the for loop reached the end
                         If colMatchesFindEntry.Count = 0 Then
@@ -543,14 +578,15 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                             'selects the correct entry text from the citation field
                             If blnCitationEntryFound Then
                                 'recalculates the selection to include only the match (entry) in citation
-                                Selection.MoveEnd Unit:=wdCharacter, Count:=objMatchCitation.FirstIndex + objMatchCitation.Length - 1
+                                'if the first character is a blank space
+                                Selection.MoveEnd Unit:=wdCharacter, Count:=objMatchCitation.FirstIndex + offsetCitationEnd
                                 'if the first character is a blank space
                                 If Left(objMatchCitation.Value, 1) = " " Then
                                     'removes the leading blank space
-                                    Selection.MoveStart Unit:=wdCharacter, Count:=objMatchCitation.FirstIndex + 1
+                                    Selection.MoveStart Unit:=wdCharacter, Count:=objMatchCitation.FirstIndex + 1 + offsetCitationBeg
                                 Else
                                     'uses the whole range
-                                    Selection.MoveStart Unit:=wdCharacter, Count:=objMatchCitation.FirstIndex
+                                    Selection.MoveStart Unit:=wdCharacter, Count:=objMatchCitation.FirstIndex + offsetCitationBeg
                                 End If
 
                                 'creates the hyperlink for the current citation entry
@@ -560,17 +596,15 @@ Sub GAUG_createHyperlinksForCitationsAPA()
                                 '    Text:="REF " & Chr(34) & "SignetBibliographie_" & Format(CStr(i), "00#") & Chr(34) & " \h", _
                                 '    PreserveFormatting:=True
                                 'better to use normal hyperlink:
-                                Selection.Hyperlinks.Add Anchor:=Selection.Range, _
+                                Selection.Hyperlinks.Add Anchor:=Selection.range, _
                                     Address:="", SubAddress:="SignetBibliographie_" & Format(CStr(i), "00#"), _
                                     ScreenTip:=""
 
                             End If
                         Else
-                            MsgBox "Orphan citation entry found:" & vbCrLf & vbCrLf & _
-                            objMatchCitation.Value & vbCrLf & vbCrLf & _
-                            "Remove it from document!", _
-                            vbExclamation, "GAUG_createHyperlinksForCitationsAPA()"
-                            'MsgBox ("Orphan citation entry found:" & vbCrLf & vbCrLf & objMatchCitation.Value & vbCrLf & vbCrLf & "Remove it from document!" & vbCrLf & vbCrLf & vbCrLf & vbCrLf & "Regular expression to find reference in bibliography (from DATA and year from DOCUMENT):" & vbCrLf & vbCrLf & objRegExpBiblioEntry.Pattern & vbCrLf & vbCrLf & vbCrLf & vbCrLf & "Last authors (from DOCUMENT):" & vbCrLf & vbCrLf & strLastAuthors & vbCrLf & vbCrLf & vbCrLf & vbCrLf & "Year of publication (from DATA):" & vbCrLf & vbCrLf & strLastYear & vbCrLf & vbCrLf & vbCrLf & vbCrLf & "Pattern to find matching between DOCUMENT and DATA (DATA):" & vbCrLf & vbCrLf & objRegExpFindEntry.Pattern)
+                            ReDim Preserve Orphans(o)
+                            Orphans(o) = strLastAuthors & ", " & strYear
+                            o = o + 1
                         End If
 
                         'Ends: Needs re-work
@@ -590,6 +624,14 @@ Sub GAUG_createHyperlinksForCitationsAPA()
 
     'reenables the screen updating
     Application.ScreenUpdating = True
+    
+    If o > 0 Then
+        MsgBox "Orphan citation entries found:" & vbCrLf & vbCrLf & _
+        Join(Orphans, vbNewLine) & vbCrLf & vbCrLf & _
+        "Remove them from document!", _
+        vbExclamation, "GAUG_createHyperlinksForCitationsAPA()"
+        'MsgBox ("Orphan citation entry found:" & vbCrLf & vbCrLf & strYear & vbCrLf & vbCrLf & "Remove it from document!" & vbCrLf & vbCrLf & vbCrLf & vbCrLf & "Regular expression to find reference in bibliography (from DATA and year from DOCUMENT):" & vbCrLf & vbCrLf & objRegExpBiblioEntry.Pattern & vbCrLf & vbCrLf & vbCrLf & vbCrLf & "Last authors (from DOCUMENT):" & vbCrLf & vbCrLf & strLastAuthors & vbCrLf & vbCrLf & vbCrLf & vbCrLf & "Year of publication (from DATA):" & vbCrLf & vbCrLf & strLastYear & vbCrLf & vbCrLf & vbCrLf & vbCrLf & "Pattern to find matching between DOCUMENT and DATA (DATA):" & vbCrLf & vbCrLf & objRegExpFindEntry.Pattern)
+    End If
 
 End Sub
 
@@ -750,7 +792,7 @@ Sub GAUG_createHyperlinksForCitationsIEEE()
             'checks if the section has text with style indicated by strStyleForTitleOfBibliography
             '(it is a section not belonging to any chapter after the sections of parts and chapters)
             blnFound = False
-            With documentSection.Range.Find
+            With documentSection.range.Find
                 .Style = strStyleForTitleOfBibliography
                 .Execute
                 blnFound = .Found
@@ -764,7 +806,7 @@ Sub GAUG_createHyperlinksForCitationsIEEE()
         'checks if the bibliography is in this section
         If blnFound Then
             'checks all fields
-            For Each sectionField In documentSection.Range.Fields
+            For Each sectionField In documentSection.range.Fields
                 'if it is the bibliography
                 If sectionField.Type = wdFieldAddin And Trim(sectionField.Code) = "ADDIN Mendeley Bibliography CSL_BIBLIOGRAPHY" Then
                     blnBibliographyFound = True
@@ -800,7 +842,7 @@ Sub GAUG_createHyperlinksForCitationsIEEE()
                             'creates the bookmark
                             Selection.Bookmarks.Add _
                                 Name:="SignetBibliographie_" & Format(CStr(intRefereceNumber), "00#"), _
-                                Range:=Selection.Range
+                                range:=Selection.range
                         End If
 
                         'continues with the next number
@@ -833,7 +875,7 @@ Sub GAUG_createHyperlinksForCitationsIEEE()
                                     If blnURLFound Then
                                         'checks there is no hyperlink already
                                         If Selection.Hyperlinks.Count = 0 Then
-                                            Selection.Hyperlinks.Add Anchor:=Selection.Range, _
+                                            Selection.Hyperlinks.Add Anchor:=Selection.range, _
                                                 Address:=Replace(Trim(CStr(varNonDetectedURL)), " ", "%20"), SubAddress:="", _
                                                 ScreenTip:=""
                                         End If
@@ -882,7 +924,7 @@ Sub GAUG_createHyperlinksForCitationsIEEE()
                                         '     when the hyperlink was created with the list of non detected URLs
                                         '     when a partial URL is detected and the hyperlink was created with the list of non detected URLs
                                         If Selection.Hyperlinks.Count = 0 Then
-                                            Selection.Hyperlinks.Add Anchor:=Selection.Range, _
+                                            Selection.Hyperlinks.Add Anchor:=Selection.range, _
                                                 Address:=strURL, SubAddress:="", _
                                                 ScreenTip:=""
                                         End If
@@ -934,7 +976,7 @@ Sub GAUG_createHyperlinksForCitationsIEEE()
     'checks all sections
     For Each documentSection In ActiveDocument.Sections
         'checks all fields
-        For Each sectionField In documentSection.Range.Fields
+        For Each sectionField In documentSection.range.Fields
             'if it is a citation
             If sectionField.Type = wdFieldAddin And Left(sectionField.Code, 18) = "ADDIN CSL_CITATION" Then
 
@@ -950,11 +992,11 @@ Sub GAUG_createHyperlinksForCitationsIEEE()
                     For Each objMatchCitation In colMatchesCitation
                         'gets the citation number as integer
                         'this will also eliminate leading zeros in numbers (in case of manual modifications)
-                        intCitationNumber = CInt(Mid(objMatchCitation.Value, 2, Len(objMatchCitation.Value) - 2))
+                        intCitationNumber = CInt(Mid(strYear, 2, Len(strYear) - 2))
 
                         'to make sure the citation number as text is the same as numeric
                         'and that the citation number is in the bibliography
-                        If (("[" & CStr(intCitationNumber) & "]") = objMatchCitation.Value) And (intCitationNumber > 0 And intCitationNumber < intRefereceNumber) Then
+                        If (("[" & CStr(intCitationNumber) & "]") = strYear) And (intCitationNumber > 0 And intCitationNumber < intRefereceNumber) Then
                             blnCitationNumberFound = True
                         Else
                             blnCitationNumberFound = False
@@ -987,12 +1029,12 @@ Sub GAUG_createHyperlinksForCitationsIEEE()
                             '    Text:="REF " & Chr(34) & "SignetBibliographie_" & Format(CStr(intCitationNumber), "00#") & Chr(34) & " \h", _
                             '    PreserveFormatting:=True
                             'better to use normal hyperlink:
-                            Selection.Hyperlinks.Add Anchor:=Selection.Range, _
+                            Selection.Hyperlinks.Add Anchor:=Selection.range, _
                                 Address:="", SubAddress:="SignetBibliographie_" & Format(CStr(intCitationNumber), "00#"), _
                                 ScreenTip:=""
                         Else
                             MsgBox "Orphan citation entry found:" & vbCrLf & vbCrLf & _
-                            objMatchCitation.Value & vbCrLf & vbCrLf & _
+                            strYear & vbCrLf & vbCrLf & _
                             "Remove it from document!", _
                             vbExclamation, "GAUG_createHyperlinksForCitationsIEEE()"
                         End If
@@ -1139,7 +1181,7 @@ Sub GAUG_removeHyperlinksForCitations(Optional ByVal strTypeOfExecution As Strin
 '*****************************
     'checks all sections
     For Each documentSection In ActiveDocument.Sections
-        For Each sectionField In documentSection.Range.Fields
+        For Each sectionField In documentSection.range.Fields
             'if it is a citation
             If sectionField.Type = wdFieldAddin And Left(sectionField.Code, 18) = "ADDIN CSL_CITATION" Then
                 sectionField.Select
@@ -1153,7 +1195,7 @@ Sub GAUG_removeHyperlinksForCitations(Optional ByVal strTypeOfExecution As Strin
                         'deletes all hyperlinks
                         For i = selectionHyperlinks.Count To 1 Step -1
                             'this method produces errors if the hyperlinks include the square brackets in IEEE
-                            If Left(selectionHyperlinks(1).Range.Text, 1) = "[" Then
+                            If Left(selectionHyperlinks(1).range.Text, 1) = "[" Then
                                 MsgBox "There was an error removing the hyperlinks" & vbCrLf & _
                                 "because they include the square brackets and" & vbCrLf & _
                                 "Microsoft Word does not like them this way." & vbCrLf & vbCrLf & _
@@ -1209,7 +1251,7 @@ Sub GAUG_removeHyperlinksForCitations(Optional ByVal strTypeOfExecution As Strin
             'checks if the section has text with style indicated by strStyleForTitleOfBibliography
             '(it is a section not belonging to any chapter after the sections of parts and chapters)
             blnFound = False
-            With documentSection.Range.Find
+            With documentSection.range.Find
                 .Style = strStyleForTitleOfBibliography
                 .Execute
                 blnFound = .Found
@@ -1222,7 +1264,7 @@ Sub GAUG_removeHyperlinksForCitations(Optional ByVal strTypeOfExecution As Strin
 
         'checks if the bibliography is in this section
         If blnFound Then
-            For Each sectionField In documentSection.Range.Fields
+            For Each sectionField In documentSection.range.Fields
                 'if it is the bibliography
                 If sectionField.Type = wdFieldAddin And Trim(sectionField.Code) = "ADDIN Mendeley Bibliography CSL_BIBLIOGRAPHY" Then
                     blnBibliographyFound = True
@@ -1435,7 +1477,7 @@ Function refreshDocument(Optional openingDocument As Boolean = False) As Boolean
     
     Dim markName As String
     
-    Dim thisField As field
+    Dim thisField As Field
 
     Dim mark
 
@@ -1445,7 +1487,7 @@ Function refreshDocument(Optional openingDocument As Boolean = False) As Boolean
     For Each mark In marks
         If citationNumber Mod 25 = 0 Then
             Call showStatusBarMessage("Mendeley is preparing to format your citations... (" & _
-                Round(100 * citationNumber / marks.count) & "%)")
+                Round(100 * citationNumber / marks.Count) & "%)")
         End If
 
         Set thisField = mark
@@ -1454,7 +1496,7 @@ Function refreshDocument(Optional openingDocument As Boolean = False) As Boolean
         
         If startsWith(markName, "ref Mendeley") Then
             markName = Right(markName, Len(markName) - 4)
-            thisField.code.Text = markName
+            thisField.Code.Text = markName
         End If
         
         If isMendeleyCitationField(markName) Then
@@ -1492,7 +1534,7 @@ Function refreshDocument(Optional openingDocument As Boolean = False) As Boolean
         Dim errorCitationIndex As Long
         errorCitationIndex = mendeleyApiClient().lastErrorCitationIndex()
         If errorCitationIndex <> -1 Then
-            Dim errorField As field
+            Dim errorField As Field
             Dim citationIndex As Long
             citationIndex = mendeleyApiClient().lastErrorCitationIndex() + 1
             Set errorField = marks(citationIndex)
@@ -1518,7 +1560,7 @@ Function refreshDocument(Optional openingDocument As Boolean = False) As Boolean
         
         If citationNumber Mod 15 = 0 Then
             Call showStatusBarMessage("Mendeley is updating your citations... (" & _
-                Round(100 * citationNumber / marks.count) & "%)")
+                Round(100 * citationNumber / marks.Count) & "%)")
         End If
 
         Set thisField = mark
@@ -1579,15 +1621,15 @@ Function refreshDocument(Optional openingDocument As Boolean = False) As Boolean
             End If
             
             Dim range As range
-            Set range = thisField.result
+            Set range = thisField.Result
             
             ' Get font used at start of bibliography
             range.Collapse (wdCollapseStart)
             
             Dim currentFontName As String
             Dim currentSize As Long
-            currentFontName = range.Font.name
-            currentSize = range.Font.size
+            currentFontName = range.Font.Name
+            currentSize = range.Font.Size
 
             ' Get paragraph used at start of bibliography
             Dim currentParagraphStyle As String 'MabEntwickeltSich
@@ -1595,13 +1637,13 @@ Function refreshDocument(Optional openingDocument As Boolean = False) As Boolean
             Dim currentParagraphSpaceAfter As Long
             Dim currentLineSpacingRule As Variant
 
-            currentParagraphStyle = range.style 'MabEntwickeltSich
+            currentParagraphStyle = range.Style 'MabEntwickeltSich
             currentParagraphSpaceBefore = range.ParagraphFormat.SpaceBefore
             currentParagraphSpaceAfter = range.ParagraphFormat.SpaceAfter
             currentLineSpacingRule = range.ParagraphFormat.LineSpacingRule
 
             ' Insert updated bibliography
-            Set range = thisField.result
+            Set range = thisField.Result
             ' Word 2013 dirty hack: We can not insert on the whole selection, we need to keep
             ' one character at the end of the selection
             If isWordRangeHackRequired Then
@@ -1610,7 +1652,7 @@ Function refreshDocument(Optional openingDocument As Boolean = False) As Boolean
             range.InsertFile (bibliography)
             ' Word 2013 dirty hack: Remove the last character
             If isWordRangeHackRequired Then
-                Set range = thisField.result
+                Set range = thisField.Result
                 range.Start = range.End - 1
                 range.Text = ""
             End If
@@ -1618,19 +1660,19 @@ Function refreshDocument(Optional openingDocument As Boolean = False) As Boolean
             ' Disable spell and grammar checking on the bibliography.
             ' This is done when the field is created in fnAddMark(), but the InsertFile() call
             ' resets this property of the Field result's range (at least on Mac Word 2011).
-            Set range = thisField.result
+            Set range = thisField.Result
             range.LanguageID = wdNoProofing
             
             ' Apply font to whole range
-            range.Font.name = currentFontName
-            range.Font.size = currentSize
+            range.Font.Name = currentFontName
+            range.Font.Size = currentSize
 
             ' Apply paragraph to whole range
             range.ParagraphFormat.SpaceBefore = currentParagraphSpaceBefore
             range.ParagraphFormat.SpaceAfter = currentParagraphSpaceAfter
             range.ParagraphFormat.LineSpacingRule = currentLineSpacingRule
 
-            range.style = currentParagraphStyle 'MabEntwickeltSich
+            range.Style = currentParagraphStyle 'MabEntwickeltSich
             
             ' Delete first character (is part of the first new paragraph of the RTF file)
             range.End = range.Start + 1
@@ -1692,3 +1734,5 @@ ExitFunction:
 
     Call showStatusBarMessage("")
 End Function
+
+
